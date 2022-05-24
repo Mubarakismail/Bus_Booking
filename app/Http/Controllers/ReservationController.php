@@ -8,6 +8,7 @@ use App\Models\Trip;
 use App\Models\User;
 use Exception;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ReservationController extends Controller
 {
@@ -46,16 +47,16 @@ class ReservationController extends Controller
     public function store(Request $request)
     {
         try {
+            $start_station = DB::table('trip_stations')->where('trip_id', $request->trip_id)->where('station_id', $request->start_station)->value('stop_number');
+            $end_station = DB::table('trip_stations')->where('trip_id', $request->trip_id)->where('station_id', $request->end_station)->value('stop_number');
             $busy_seat = Reservation::where('seat_id', $request->seat_id)
-                ->where(function ($query) use ($request) {
-                    $query->where(function ($query1) use ($request) {
-                        $query1->where('reservations.start_station_id', '<=', $request->start_station)->where('reservations.end_station_id', '>=', $request->end_station);
-                    })->orWhere(function ($query1) use ($request) {
-                        $query1->where('reservations.start_station_id', '>=', $request->start_station)->where('reservations.end_station_id', '<', $request->end_station);
-                    })->orWhere(function ($query1) use ($request) {
-                        $query1->where('reservations.start_station_id', '>=', $request->start_station)->where('reservations.end_station_id', '>', $request->end_station);
-                    })->orWhere(function ($query1) use ($request) {
-                        $query1->where('reservations.end_station_id', '<=', $request->start_station)->where('reservations.end_station_id', '>', $request->end_station);
+                ->where(function ($query) use ($start_station, $end_station) {
+                    $query->where(function ($query1) use ($start_station, $end_station) {
+                        $query1->where('reservations.start_station_id', '<=', $start_station)->where('reservations.end_station_id', '>=', $end_station);
+                    })->orWhere(function ($query1) use ($start_station, $end_station) {
+                        $query1->where('reservations.start_station_id', '>', $start_station)->where('reservations.start_station_id', '<', $end_station);
+                    })->orWhere(function ($query1) use ($start_station, $end_station) {
+                        $query1->where('reservations.end_station_id', '>', $start_station)->where('reservations.end_station_id', '<', $end_station);
                     });
                 })
                 ->select('reservations.*')->first();
@@ -65,8 +66,8 @@ class ReservationController extends Controller
             Reservation::create([
                 'trip_id' => $request->trip_id,
                 'seat_id' => $request->seat_id,
-                'start_station_id' => $request->start_station,
-                'end_station_id' => $request->end_station,
+                'start_station_id' => $start_station,
+                'end_station_id' => $end_station,
                 'user_id' => $this->user_id,
             ]);
             return response()->json(['message' => 'Seat reserved successfully'], 200);

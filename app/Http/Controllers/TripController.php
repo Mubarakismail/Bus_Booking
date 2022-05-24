@@ -16,52 +16,73 @@ class TripController extends Controller
      */
     public function index(Request $request)
     {
-        $busy_seats = Trip::where('trips.departure_time', '>=', '2022-05-17 00:00:00')
-            ->join('reservations', 'reservations.trip_id', 'trips.id')
-            ->where(function ($query) use ($request) {
-                $query->where(function ($query1) use ($request) {
-                    $query1->where('reservations.start_station_id', '<=', $request->start_station)->where('reservations.end_station_id', '>=', $request->end_station);
-                })->orWhere(function ($query1) use ($request) {
-                    $query1->where('reservations.start_station_id', '>=', $request->start_station)->where('reservations.end_station_id', '<', $request->end_station);
-                })->orWhere(function ($query1) use ($request) {
-                    $query1->where('reservations.start_station_id', '>=', $request->start_station)->where('reservations.end_station_id', '>', $request->end_station);
-                })->orWhere(function ($query1) use ($request) {
-                    $query1->where('reservations.end_station_id', '<=', $request->start_station)->where('reservations.end_station_id', '>', $request->end_station);
-                });
-            })
-            ->join('trip_stations', 'trip_stations.trip_id', 'trips.id')
-            ->join('stations', 'trip_stations.station_id', 'stations.id')
-            ->select('trips.*')->get();
-
-
-        $available_seats_reservation = Trip::where('trips.departure_time', '>=', '2022-05-20 00:00:00')
-            ->join('reservations', 'reservations.trip_id', 'trips.id')
-            ->where(function ($query) use ($request) {
-                $query->Where(function ($query1) use ($request) {
-                    $query1->where('reservations.start_station_id', '>', $request->start_station)->where('reservations.start_station_id', '>=', $request->end_station);
-                })->orWhere(function ($query1) use ($request) {
-                    $query1->where('reservations.start_station_id', '>', $request->end_station)->where('reservations.end_station_id', '>', $request->start_station);
-                });
-            })
-            ->join('trip_stations', 'trip_stations.trip_id', 'trips.id')
-            ->join('stations', 'trip_stations.station_id', 'stations.id')
-            ->select('trips.*')->get();
-
-        $all_seats = Trip::where('trips.departure_time', '>=', '2022-05-20 00:00:00')
-            ->join('trip_buses', 'trip_buses.trip_id', 'trips.id')
-            ->join('buses', 'trip_buses.bus_id', 'buses.id')
-            ->join('seats', 'buses.id', 'seats.bus_id')
-            ->select('trips.*')
+        $start_station = Trip::join('trip_stations', 'trips.id', 'trip_stations.trip_id')->where('station_id', $request->start_station)
             ->groupBy('trips.id')
             ->groupBy('trips.departure_time')
             ->groupBy('trips.arrival_time')
             ->groupBy('trips.type')
             ->groupBy('trips.created_at')
             ->groupBy('trips.updated_at')
+            ->select('trips.*')
+            ->get()
+            ->toArray();
+        dd($start_station);
+        $busy_seats = Trip::where('trips.departure_time', '>=', $request->time)
+            ->join('reservations', 'reservations.trip_id', 'trips.id')
+            ->where(function ($query) use ($request) {
+                $query->where(function ($query1) use ($start_station, $end_station) {
+                    $query1->where('reservations.start_station_id', '<=', $start_station)->where('reservations.end_station_id', '>=', $end_station);
+                })->orWhere(function ($query1) use ($start_station, $end_station) {
+                    $query1->where('reservations.start_station_id', '>', $start_station)->where('reservations.start_station_id', '<', $end_station);
+                })->orWhere(function ($query1) use ($start_station, $end_station) {
+                    $query1->where('reservations.end_station_id', '>', $start_station)->where('reservations.end_station_id', '<', $end_station);
+                });
+            })
+            ->join('trip_stations', 'trip_stations.trip_id', 'trips.id')
+            ->join('stations', 'trip_stations.station_id', 'stations.id')
+            ->groupBy('trips.id')
+            ->groupBy('trips.departure_time')
+            ->groupBy('trips.arrival_time')
+            ->groupBy('trips.type')
+            ->groupBy('trips.created_at')
+            ->groupBy('trips.updated_at')
+            ->select('trips.*')->get();
+
+
+        $available_seats_reservation = Trip::where('trips.departure_time', '>=', $request->time)
+            ->join('reservations', 'reservations.trip_id', 'trips.id')
+            ->where(function ($query) use ($request) {
+                $start_station = Trip::join('trip_stations', 'trips.id', 'trip_stations.trip_id')->where('station_id', $request->start_station)->get()->pluck('trip_stations.stop_number');
+                $end_station = Trip::join('trip_stations', 'trips.id', 'trip_stations.trip_id')->where('station_id', $request->end_station)->get()->pluck('trip_stations.stop_number');
+
+                $query->Where(function ($query1) use ($start_station, $end_station) {
+                    $query1->where('reservations.start_station_id', '>', $start_station)->where('reservations.start_station_id', '>=', $end_station);
+                })->orWhere(function ($query1) use ($start_station, $end_station) {
+                    $query1->where('reservations.start_station_id', '>', $end_station)->where('reservations.end_station_id', '>', $start_station);
+                });
+            })
+            ->join('trip_stations', 'trip_stations.trip_id', 'trips.id')
+            ->join('stations', 'trip_stations.station_id', 'stations.id')
+            ->groupBy('trips.id')
+            ->groupBy('trips.departure_time')
+            ->groupBy('trips.arrival_time')
+            ->groupBy('trips.type')
+            ->groupBy('trips.created_at')
+            ->groupBy('trips.updated_at')
+            ->select('trips.*')->get();
+
+        $all_seats = Trip::where('trips.departure_time', '>=', $request->time)
+            ->groupBy('trips.id')
+            ->groupBy('trips.departure_time')
+            ->groupBy('trips.arrival_time')
+            ->groupBy('trips.type')
+            ->groupBy('trips.created_at')
+            ->groupBy('trips.updated_at')
+            ->select('trips.*')
             ->get();
 
 
-        $tst1 = $available_seats_reservation->diff($all_seats);
+        $tst1 = $available_seats_reservation;
         $tst2 = $all_seats->diff($busy_seats);
         $tst2 = $tst2->merge($tst1);
 

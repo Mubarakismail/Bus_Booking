@@ -5,8 +5,8 @@ namespace App\Http\Controllers;
 use App\Http\Resources\seatsResource;
 use App\Models\Reservation;
 use App\Models\Seat;
-use App\Models\Trip;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class SeatController extends Controller
 {
@@ -17,38 +17,30 @@ class SeatController extends Controller
      */
     public function index(Request $request)
     {
-        $busy_seats = Seat::join('buses', 'seats.bus_id', 'buses.id')
-            ->join('trip_buses', 'buses.id', 'trip_buses.bus_id')
-            ->where('trip_buses.trip_id', $request->trip_id)
-            ->join('reservations', 'reservations.trip_id', 'trip_buses.trip_id')
-            ->where(function ($query) use ($request) {
-                $query->where(function ($query1) use ($request) {
-                    $query1->where('reservations.start_station_id', '<=', $request->start_station)->where('reservations.end_station_id', '>=', $request->end_station);
-                })->orWhere(function ($query1) use ($request) {
-                    $query1->where('reservations.start_station_id', '>=', $request->start_station)->where('reservations.end_station_id', '<', $request->end_station);
-                })->orWhere(function ($query1) use ($request) {
-                    $query1->where('reservations.start_station_id', '>=', $request->start_station)->where('reservations.end_station_id', '>', $request->end_station);
-                })->orWhere(function ($query1) use ($request) {
-                    $query1->where('reservations.end_station_id', '<=', $request->start_station)->where('reservations.end_station_id', '>', $request->end_station);
+        $start_station = DB::table('trip_stations')->where('trip_id', $request->trip_id)->where('station_id', $request->start_station)->value('stop_number');
+        $end_station = DB::table('trip_stations')->where('trip_id', $request->trip_id)->where('station_id', $request->end_station)->value('stop_number');
+        $busy_seats = Reservation::where('reservations.trip_id', $request->trip_id)
+            ->where(function ($query) use ($start_station, $end_station) {
+                $query->where(function ($query1) use ($start_station, $end_station) {
+                    $query1->where('reservations.start_station_id', '<=', $start_station)->where('reservations.end_station_id', '>=', $end_station);
+                })->orWhere(function ($query1) use ($start_station, $end_station) {
+                    $query1->where('reservations.start_station_id', '>', $start_station)->where('reservations.start_station_id', '<', $end_station);
+                })->orWhere(function ($query1) use ($start_station, $end_station) {
+                    $query1->where('reservations.end_station_id', '>', $start_station)->where('reservations.end_station_id', '<', $end_station);
+                });
+            })->select('reservations.seat_id as id')
+            ->get();
+
+        $available_seats_reservation = Reservation::where('reservations.trip_id', $request->trip_id)
+            ->where(function ($query) use ($start_station, $end_station) {
+                $query->Where(function ($query1) use ($start_station, $end_station) {
+                    $query1->where('reservations.start_station_id', '>', $start_station)->where('reservations.start_station_id', '>=', $end_station);
+                })->orWhere(function ($query1) use ($start_station, $end_station) {
+                    $query1->where('reservations.start_station_id', '>', $end_station)->where('reservations.end_station_id', '>', $start_station);
                 });
             })
-            ->groupBy('seats.id')
-            ->select('seats.id')->get();
-
-
-        $available_seats_reservation = Seat::join('buses', 'seats.bus_id', 'buses.id')
-            ->join('trip_buses', 'buses.id', 'trip_buses.bus_id')
-            ->where('trip_buses.trip_id', $request->trip_id)
-            ->join('reservations', 'reservations.trip_id', 'trip_buses.trip_id')
-            ->where(function ($query) use ($request) {
-                $query->Where(function ($query1) use ($request) {
-                    $query1->where('reservations.start_station_id', '>', $request->start_station)->where('reservations.start_station_id', '>=', $request->end_station);
-                })->orWhere(function ($query1) use ($request) {
-                    $query1->where('reservations.start_station_id', '>', $request->end_station)->where('reservations.end_station_id', '>', $request->start_station);
-                });
-            })
-            ->groupBy('seats.id')
-            ->select('seats.id')->get();
+            ->select('reservations.seat_id as id')
+            ->get();
 
         $all_seats = Seat::join('buses', 'seats.bus_id', 'buses.id')
             ->join('trip_buses', 'trip_buses.bus_id', 'buses.id')
@@ -59,7 +51,7 @@ class SeatController extends Controller
             ->get();
 
 
-        $tst1 = $available_seats_reservation->diff($all_seats);
+        $tst1 = $available_seats_reservation->diff($busy_seats);
         $tst2 = $all_seats->diff($busy_seats);
         $tst2 = $tst2->merge($tst1);
 
